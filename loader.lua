@@ -1,68 +1,68 @@
-local URL = "https://animedice.xinneflex.workers.dev/?placeId=" .. game.PlaceId
-local KEY = 37
-local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local URL = "https://anime-dice-worker.xinneflex.workers.dev/"
 
-local function base64decode(s)
-    s = s:gsub("%s+", "")
-    local out = {}
+local ok, payload = pcall(function()
+    return game:HttpGet(URL)
+end)
 
-    for i = 1, #s, 4 do
-        local a = (B64:find(s:sub(i, i), 1, true) or 1) - 1
-        local b = (B64:find(s:sub(i + 1, i + 1), 1, true) or 1) - 1
-        local c = (B64:find(s:sub(i + 2, i + 2), 1, true) or 1) - 1
-        local d = (B64:find(s:sub(i + 3, i + 3), 1, true) or 1) - 1
-        local n = a * 262144 + b * 4096 + c * 64 + d
-
-        out[#out + 1] = string.char(math.floor(n / 65536) % 256)
-
-        if s:sub(i + 2, i + 2) ~= "=" then
-            out[#out + 1] = string.char(math.floor(n / 256) % 256)
-        end
-
-        if s:sub(i + 3, i + 3) ~= "=" then
-            out[#out + 1] = string.char(n % 256)
-        end
-    end
-
-    return table.concat(out)
+if not ok then
+    warn("Anime Dice: failed to download payload")
+    return
 end
 
-local function xor(a, b)
-    local result = 0
-    local bit = 1
+local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-    while a > 0 or b > 0 do
-        if a % 2 ~= b % 2 then
-            result = result + bit
+local function base64decode(data)
+    data = data:gsub("[^" .. b64chars .. "=]", "")
+
+    return (data:gsub(".", function(x)
+        if x == "=" then
+            return ""
         end
-        a = math.floor(a / 2)
-        b = math.floor(b / 2)
-        bit = bit * 2
-    end
 
-    return result
+        local r, f = "", b64chars:find(x, 1, true) - 1
+
+        for i = 6, 1, -1 do
+            r = r .. (f % 2^i - f % 2^(i-1) > 0 and "1" or "0")
+        end
+
+        return r
+    end):gsub("%d%d%d?%d?%d?%d?%d?%d?", function(x)
+        if #x ~= 8 then
+            return ""
+        end
+
+        local c = 0
+
+        for i = 1, 8 do
+            c += x:sub(i, i) == "1" and 2^(8-i) or 0
+        end
+
+        return string.char(c)
+    end))
 end
 
-local payload = game:HttpGet(URL)
 local encoded = base64decode(payload)
-local decoded = {}
+local code = {}
 
 for i = 1, #encoded do
-    decoded[i] = string.char(xor(string.byte(encoded, i), KEY))
+    code[i] = string.char(
+        bit32.bxor(encoded:byte(i), 91)
+    )
 end
 
-local bytecode = assert(loadstring(table.concat(decoded)))()
-local pc = 1
+local source = table.concat(code)
 
-while true do
-    local op = bytecode[pc]
+local fn, err = loadstring(source)
 
-    if op == 0 then
-        break
-    elseif op == 1 then
-        print(bytecode[pc + 1])
-        pc = pc + 2
-    else
-        error("Unknown opcode: " .. tostring(op))
-    end
+if not fn then
+    warn("Anime Dice: failed to compile payload")
+    warn(err)
+    return
+end
+
+local success, runtimeError = pcall(fn)
+
+if not success then
+    warn("Anime Dice: runtime error")
+    warn(runtimeError)
 end
