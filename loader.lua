@@ -19,7 +19,8 @@ local function base64decode(data)
             return ""
         end
 
-        local r, f = "", b64chars:find(x, 1, true) - 1
+        local r = ""
+        local f = b64chars:find(x, 1, true) - 1
 
         for i = 6, 1, -1 do
             r = r .. (f % 2^i - f % 2^(i-1) > 0 and "1" or "0")
@@ -45,9 +46,7 @@ local encoded = base64decode(payload)
 local code = {}
 
 for i = 1, #encoded do
-    code[i] = string.char(
-        bit32.bxor(encoded:byte(i), 91)
-    )
+    code[i] = string.char(bit32.bxor(encoded:byte(i), 91))
 end
 
 local source = table.concat(code)
